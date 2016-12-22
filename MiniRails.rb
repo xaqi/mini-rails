@@ -178,13 +178,16 @@ module Rack
     def server
       @_server = Rack::Handler.default
     end
+    def build_app_and_options_from_config
+      app = Rack::Builder.parse_file 'config.ru'
+    end
     def wrapped_app
       @wrapped_app ||= build_app app
     end
     def app
       #@app ||= options[:builder] ? build_app_from_string : build_app_and_options_from_config
-      #@app ||= build_app_from_string
-      @app = Proc.new{|*args| ['200',[],["hello ","rails from app."]] }
+      @app ||= build_app_and_options_from_config
+      #@app = Proc.new{|*args| ['200',[],["hello ","rails from app."]] }
     end
     def build_app(app)
       middleware.reverse_each do |middleware|
@@ -195,15 +198,38 @@ module Rack
       app
     end
     def middleware
-      #self.class.middleware
-      []
+      self.class.middleware
     end
   end
 
+  #https://github.com/rack/rack/blob/master/lib/rack/builder.rb
+  class Builder
+    def self.parse_file(config)
+      cfgfile='Rails.application' #read config.ru
+      app=new_from_string cfgfile
+      app
+    end
+    def self.new_from_string(builder_script)
+      app = eval "Rack::Builder.new {\n" + builder_script + "\n}.to_app"
+    end
+    def initialize(default_app = nil,&block)
+      @run =  default_app
+      @run = instance_eval(&block) if block_given?
+    end
+    def to_app
+      app = @run
+      app
+    end
+  end
 end
 
 #Rack::Server.start
 module Rails
+
+  def application
+    @app = Proc.new{|*args| ['200',[],["hello ","rails from rails application."]] }
+  end
+  module_function :application
 
   #https://github.com/rails/rails/blob/master/railties/lib/rails/commands/server/server_command.rb
   class Server < ::Rack::Server
@@ -212,6 +238,9 @@ module Rails
     end
     def start
       super
+    end
+    def middleware
+      Hash.new([])
     end
   end
 
