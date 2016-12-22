@@ -57,24 +57,101 @@ module WEBrick
       @request = socket.gets
       puts @request
     end
+    def path
+      '/'
+    end
   end
 
   class HTTPResponse
-    def send_response(socket)
-      socket << "HTTP/1.1 200/OK\r\nContent-type:text/html\r\n\r\n"
-      socket << 'hello rails.'
+    def initialize(sock)
+      @sock=sock
+    end
+    def send_response
+      @sock << "HTTP/1.1 200/OK\r\nContent-type:text/html\r\n\r\n"
+      @sock << 'hello rails.'
     end
   end
 
   class HTTPServer < GenericServer
+    def initialize
+      @mount_tab = Hash.new
+    end
     def run(socket)
       req=HTTPRequest.new
-      res=HTTPResponse.new
+      res=HTTPResponse.new socket
       req.parse socket
-      res.send_response socket
+      self.service(req, res)
+      socket.close
+    end
+    def service(req, res)
+      servlet, = search_servlet req.path
+      si = servlet.get_instance self
+      si.service req, res
+    end
+    def search_servlet(path)
+      @mount_tab[path]
+    end
+    def mount(dir,servlet)
+      @mount_tab[dir] = [servlet]
     end
   end
 
 end
 
-WEBrick::HTTPServer.new.start
+#WEBrick::HTTPServer.new.start
+
+module WEBrick
+  module HTTPServlet
+
+    class AbstractServlet
+      def initialize(server)
+        @server = server
+      end
+      def self.get_instance(server)
+        self.new server
+      end
+      def service(req, res)
+        raise 'service(req, res) must be provided by user.'
+      end
+    end
+
+  end
+end
+
+module Rack
+  module Handler
+
+    def self.default
+      Rack::Handler::WEBrick
+    end
+
+    class WEBrick < ::WEBrick::HTTPServlet::AbstractServlet
+      def self.run
+        @server = ::WEBrick::HTTPServer.new
+        @server.mount '/',Rack::Handler::WEBrick
+        @server.start
+      end
+      def service(req, res)
+        res.send_response
+      end
+    end
+
+  end
+
+  class Server
+    def self.start
+      new.start
+    end
+    class << self
+      def start &blk
+        server.run &blk
+      end
+      def server
+        @_server = Rack::Handler.default
+      end
+    end
+  end
+
+end
+
+Rack::Server.start
