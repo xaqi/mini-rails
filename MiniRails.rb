@@ -64,16 +64,27 @@ module WEBrick
     def path
       '/'
     end
+    def meta_vars
+      nil
+    end
+    def method_missing(method_name)
+      puts "missing #{method_name}"
+      nil
+    end
   end
 
   #https://github.com/candlerb/webrick/blob/master/lib/webrick/httpresponse.rb
   class HTTPResponse
-    def initialize(sock)
-      @sock=sock
+    attr_reader :header, :body
+    attr_accessor :status
+    def initialize
+      @status='200'
+      @header=Hash.new
+      @body=[]
     end
-    def send_response
-      @sock << "HTTP/1.1 200/OK\r\nContent-type:text/html\r\n\r\n"
-      @sock << 'hello rails.'
+    def send_response(sock)
+      sock << "HTTP/1.1 200/OK\r\nContent-type:text/html\r\n\r\n"
+      @body.each { |part| sock << part }
     end
   end
 
@@ -82,23 +93,24 @@ module WEBrick
     def initialize
       @mount_tab = Hash.new
     end
-    def run(socket)
+    def run(sock)
       req=HTTPRequest.new
-      res=HTTPResponse.new socket
-      req.parse socket
+      res=HTTPResponse.new
+      req.parse sock
       self.service(req, res)
-      socket.close
+      res.send_response(sock)
+      sock.close
     end
     def service(req, res)
-      servlet, = search_servlet req.path
-      si = servlet.get_instance self
+      servlet, options = search_servlet req.path
+      si = servlet.get_instance self, *options
       si.service req, res
     end
     def search_servlet(path)
       @mount_tab[path]
     end
-    def mount(dir,servlet)
-      @mount_tab[dir] = [servlet]
+    def mount(dir,servlet,*options)
+      @mount_tab[dir] = [servlet,options]
     end
   end
 
@@ -111,11 +123,12 @@ module WEBrick
 
     #https://github.com/candlerb/webrick/blob/master/lib/webrick/httpservlet/abstract.rb
     class AbstractServlet
-      def initialize(server)
+      def initialize(server, *options)
         @server = server
+        @options = options
       end
-      def self.get_instance(server)
-        self.new server
+      def self.get_instance(server,*options)
+        self.new server,*options
       end
       def service(req, res)
         raise 'service(req, res) must be provided by user.'
@@ -134,13 +147,21 @@ module Rack
 
     #https://github.com/rack/rack/blob/master/lib/rack/handler/webrick.rb
     class WEBrick < ::WEBrick::HTTPServlet::AbstractServlet
-      def self.run
+      def self.run(app)
         @server = ::WEBrick::HTTPServer.new
-        @server.mount '/',Rack::Handler::WEBrick
+        @server.mount '/',Rack::Handler::WEBrick, app
         @server.start
       end
+      def initialize(server, app)
+        super server
+        @app = app
+      end
       def service(req, res)
-        res.send_response
+        env = req.meta_vars
+        status, headers, body = @app.call(env)
+        #res.status= status.to_i
+        #headers.each { |k, vs| res[k] = vs.split("\n").join(", ") }
+        body.each { |part| res.body << part }
       end
     end
 
@@ -152,10 +173,30 @@ module Rack
       new.start
     end
     def start &blk
-      server.run &blk
+      server.run wrapped_app, &blk
     end
     def server
       @_server = Rack::Handler.default
+    end
+    def wrapped_app
+      @wrapped_app ||= build_app app
+    end
+    def app
+      #@app ||= options[:builder] ? build_app_from_string : build_app_and_options_from_config
+      #@app ||= build_app_from_string
+      @app = Proc.new{|*args| ['200',[],["hello ","rails from app."]] }
+    end
+    def build_app(app)
+      middleware.reverse_each do |middleware|
+        middleware = middleware.call(self)
+        klass, *args = middleware
+        app = klass.new(app, *args)
+      end
+      app
+    end
+    def middleware
+      #self.class.middleware
+      []
     end
   end
 
