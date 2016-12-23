@@ -65,7 +65,7 @@ module WEBrick
       '/'
     end
     def meta_vars
-      nil
+      'm v'
     end
     def method_missing(method_name)
       puts "missing #{method_name}"
@@ -185,9 +185,7 @@ module Rack
       @wrapped_app ||= build_app app
     end
     def app
-      #@app ||= options[:builder] ? build_app_from_string : build_app_and_options_from_config
       @app ||= build_app_and_options_from_config
-      #@app = Proc.new{|*args| ['200',[],["hello ","rails from app."]] }
     end
     def build_app(app)
       middleware.reverse_each do |middleware|
@@ -221,15 +219,20 @@ module Rack
       app
     end
   end
+
+  class Request
+    module Env
+      attr_reader :env
+      def initialize(env)
+        @env=env
+        super()
+      end
+    end
+  end
 end
 
 #Rack::Server.start
 module Rails
-
-  def application
-    @app = Proc.new{|*args| ['200',[],["hello ","rails from rails application."]] }
-  end
-  module_function :application
 
   #https://github.com/rails/rails/blob/master/railties/lib/rails/commands/server/server_command.rb
   class Server < ::Rack::Server
@@ -246,12 +249,17 @@ module Rails
 
   module Command
 
+    #https://github.com/rails/rails/blob/56b3849316b9c4cf4423ef8de30cbdc1b7e0f7af/railties/lib/rails/command/actions.rb
+    module Actions
+    end
     class Base
+      include Actions
     end
 
     #https://github.com/rails/rails/blob/master/railties/lib/rails/commands/server/server_command.rb
     class ServerCommand < Base
       def perform
+        require APP_PATH
         Rails::Server.new.tap do |server|
           server.start
         end
@@ -281,8 +289,12 @@ module Rails
 
   end
 
+  module AppLoader
+    extend self
+    def exec_app
+      Object.const_set(:APP_PATH, File.expand_path("config/application", Dir.pwd))
+    end
+
+  end
 end
 
-#https://github.com/rails/rails/blob/master/railties/lib/rails/cli.rb
-ARGV=['server']
-Rails::Command.invoke :application, ARGV
