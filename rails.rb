@@ -17,8 +17,12 @@ module Rails
       app.call req.env
     end
     def app
-      @app = Proc.new{|*args| ['200',[],["hello ","rails from rails engine."]] }
-      #@app ||= config.middleware.build(endpoint)
+      @app ||= begin
+        stack = default_middleware_stack
+        config.middleware = config.middleware.merge_into stack
+        config.middleware.build
+      end
+      #@app = Proc.new{|*args| ['200',[],["hello ","rails from rails engine."]] }
     end
     def self.instance
       new
@@ -28,6 +32,28 @@ module Rails
       # req.routes = routes
       # req.engine_script_name = req.script_name
       req
+    end
+    def config
+      @config ||= Engine::Configuration.new
+    end
+    def default_middleware_stack
+      ActionDispatch::MiddlewareStack.new
+    end
+
+    class Configuration #< ::Rails::Railtie::Configuration
+      attr_accessor :middleware
+      def initialize
+        @middleware = Rails::Configuration::MiddlewareStackProxy.new
+      end
+
+    end
+  end
+
+  module Configuration
+    class MiddlewareStackProxy
+      def merge_into(other)
+        other
+      end
     end
   end
 
@@ -50,6 +76,11 @@ module ActionDispatch
     include Rack::Request::Env
     def initialize(env)
       super
+    end
+  end
+  class MiddlewareStack
+    def build
+      Proc.new{|*args| ['200',[],["hello ","rails from rails MiddlewareStack."]] }
     end
   end
 end
