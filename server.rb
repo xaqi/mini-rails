@@ -8,7 +8,7 @@ module WEBrick
     def create_listeners
       address='0.0.0.0'
       port=8081
-      res = Socket::getaddrinfo(address, port, Socket::AF_UNSPEC, Socket::SOCK_STREAM, 0, Socket::AI_PASSIVE)
+      res = Socket::getaddrinfo(address, port, Socket::AF_UNSPEC, Socket::SOCK_STREAM, 1, Socket::AI_PASSIVE)
       sockets = []
       res.each{|ai|
         puts ("TCPServer.new(#{ai[3]}, #{port})")
@@ -57,15 +57,18 @@ module WEBrick
 
   #https://github.com/candlerb/webrick/blob/master/lib/webrick/httprequest.rb
   class HTTPRequest
+    LF="\n"
     def parse(socket=nil)
-      @request = socket.gets
-      puts @request
+      @request = socket.gets LF,4096
+      @path_info = @request
     end
     def path
       '/'
     end
     def meta_vars
-      'm v'
+      meta = Hash.new
+      meta["PATH_INFO"]         = @path_info
+      meta
     end
     def method_missing(method_name)
       puts "missing #{method_name}"

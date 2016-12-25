@@ -105,6 +105,11 @@ module ActionDispatch
   module Http
     module Parameters
       attr_accessor :path_parameters
+      def path_parameters
+        reg=/\/([^\/]+)(?:\/?([^\/]+))?\/?\s/
+        m = reg.match env["PATH_INFO"].strip
+        {:action=>$2 || 'index',:controller=>$1 || 'Home'}
+      end
     end
   end
 
@@ -116,14 +121,15 @@ module ActionDispatch
     def initialize(env)
       super
     end
+
     def controller_class
-      return HomeController
       params = path_parameters
       if params.key?(:controller)
-        controller_param = params[:controller].underscore
+        controller_param = params[:controller]
         params[:action] ||= "index"
-        const_name = "#{controller_param.camelize}Controller"
-        ActiveSupport::Dependencies.constantize(const_name)
+        const_name = "#{controller_param}Controller"
+        #ActiveSupport::Dependencies.constantize(const_name)
+        eval const_name
       else
         #PASS_NOT_FOUND
       end
@@ -192,11 +198,12 @@ module ActionDispatch
     class RouteSet
       class Dispatcher < Routing::Endpoint
         def serve(req)
-          return ['200',[],["hello ","rails from RouteSet Dispatcher."] ]
+          #return ['200',[],["hello ","rails from RouteSet Dispatcher."] ]
           params     = req.path_parameters
           controller = controller req
           res        = controller.make_response! req
-          dispatch(controller, params[:action], req, res)
+          #dispatch(controller, params[:action], req, res)
+          dispatch(controller,'index', req, res)
         end
         def dispatch(controller, action, req, res)
           controller.dispatch(action, req, res)
@@ -215,8 +222,8 @@ module ActionDispatch
       def initialize(config = DEFAULT_CONFIG)
         @set    = Journey::Routes.new
         @router = Journey::Router.new @set
-        #Routes should be set by route mapping registers, for simplicity, hard code here
         @set.instance_eval{
+          #Routes should be set by route mapping registers, hard code here for simplicity
           @routes << Dispatcher.new
         }
       end
@@ -314,6 +321,9 @@ module ActionController
       set_response!(response)
       process(name)
     end
+    def self.dispatch(name, req, res)
+      new.dispatch name,req,res
+    end
     def set_response!(response) # :nodoc:
       @_response = response
     end
@@ -328,7 +338,7 @@ module ActionController
     end
     def self.call(env)
       req = ActionDispatch::Request.new env
-      req.path_parameters= {:action=>'list'}
+      req.path_parameters= {:action=>'index',:controller=>'home'}
       action(req.path_parameters[:action]).call(env)
     end
     def self.action(name)
@@ -338,12 +348,6 @@ module ActionController
         new.dispatch(name, req, res)
       }
     end
-    def index(*args)
-      ['200',[],["hello ","rails from rails Action Index."]]
-    end
-    def list(*args)
-      ['200',[],["hello ","rails from rails Action List."]]
-    end
   end
   #https://github.com/rails/rails/blob/master/actionpack/lib/action_co
   class Base < Metal
@@ -352,8 +356,7 @@ module ActionController
 end
 
 
-class HomeController
-  def index
-    ['200',[],["hello ","rails from rails Home Index."]]
-  end
+def start_server
+  Rails::AppLoader.exec_app
+  Rails::Command.invoke :application, ARGV
 end
