@@ -31,11 +31,6 @@ http://localhost:8081/unkown_url        => "404"
 require_relative 'mini-rails'
 
 #define your controllers and actions
-class HomeController < ActionController::Base
-    def index
-        ['200',[],["hello from Home Index."]]
-    end
-end
 class UserController < ActionController::Base
     def about
         ['200',[],["hello from User About."]]
