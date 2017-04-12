@@ -1,5 +1,6 @@
-mini-rails
+mini-rails  
 =====================
+RubyChina讨论贴：<a href="https://ruby-china.org/topics/32764" target="_blank">https://ruby-china.org/topics/32764</a>
 
 ## What is mini-rails?
 
